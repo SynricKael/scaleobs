@@ -1,0 +1,23 @@
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - generic [ref=e7]:
+      - img [ref=e9]
+      - heading "服务器运维平台" [level=1] [ref=e11]
+      - paragraph [ref=e12]: 请登录以继续
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - generic [ref=e15]: 用户名
+        - generic [ref=e16]:
+          - img [ref=e17]
+          - textbox "用户名" [ref=e20]:
+            - /placeholder: admin
+      - generic [ref=e21]:
+        - generic [ref=e22]: 密码
+        - generic [ref=e23]:
+          - img [ref=e24]
+          - textbox "密码" [ref=e27]:
+            - /placeholder: ••••••••
+      - button "登录" [ref=e28] [cursor=pointer]:
+        - img [ref=e29]
+        - text: 登录
+  - paragraph [ref=e32]: Server Ops Portal v0.1.0

@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  # ============================================================
+  # Gateway — 路由中枢 + 反向代理 + 认证 + API
+  # ============================================================
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      CONFIG_PATH: /app/config.yml
+      JWT_SECRET: ${JWT_SECRET:-change-me}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+    volumes:
+      - ./config/services.yml:/app/config.yml:ro
+    restart: unless-stopped
+    depends_on:
+      - frps
+    networks:
+      - ops-net
+
+  # ============================================================
+  # Dashboard — Vue 3 SPA (由 Nginx 托管)
+  # ============================================================
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - ops-net
+
+  # ============================================================
+  # Nginx — TLS 终止 + 静态文件 + 反向代理到 Gateway
+  # ============================================================
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - gateway
+      - dashboard
+    restart: unless-stopped
+    networks:
+      - ops-net
+
+  # ============================================================
+  # Agent — 服务器指标采集（示例：监控本机）
+  # ============================================================
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    environment:
+      GATEWAY_URL: ws://gateway:8080
+      SERVER_ID: main-server
+      AGENT_TOKEN: ${AGENT_TOKEN:-agent-secret}
+      COLLECT_INTERVAL: "10s"
+    volumes:
+      - /proc:/host/proc:ro
+    privileged: true
+    restart: unless-stopped
+    depends_on:
+      - gateway
+    networks:
+      - ops-net
+
+  # ============================================================
+  # FRP 服务端 — 示例第三方服务
+  # ============================================================
+  frps:
+    image: fatedier/frps:latest
+    volumes:
+      - ./config/frps.toml:/etc/frp/frps.toml:ro
+    restart: unless-stopped
+    networks:
+      - ops-net
+
+  # ============================================================
+  # Portainer — 示例第三方服务
+  # ============================================================
+  portainer:
+    image: portainer/portainer-ce:latest
+    command: -H unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer_data:/data
+    restart: unless-stopped
+    networks:
+      - ops-net
+
+networks:
+  ops-net:
+    driver: bridge
+
+volumes:
+  portainer_data:

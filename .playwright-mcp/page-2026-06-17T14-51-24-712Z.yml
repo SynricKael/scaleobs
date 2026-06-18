@@ -1,0 +1,22 @@
+- generic [ref=e2]:
+  - main [ref=e3]:
+    - generic [ref=e4]:
+      - navigation [ref=e5]:
+        - generic [ref=e6]:
+          - button "Headscale" [ref=e7]:
+            - img [ref=e8]
+            - generic [ref=e10]: Headscale
+          - link "User View" [ref=e11]:
+            - /url: /p/headscale/web/users.html
+            - img [ref=e12]
+            - generic [ref=e14]: User View
+          - link "Device View" [ref=e15]:
+            - /url: /p/headscale/web/devices.html
+            - img [ref=e16]
+            - generic [ref=e18]: Device View
+          - link "Settings" [ref=e19]:
+            - /url: /p/headscale/web/settings.html
+            - img [ref=e20]
+            - generic [ref=e23]: Settings
+      - heading "User View" [level=1] [ref=e28]
+  - generic [ref=e29]: untitled page
