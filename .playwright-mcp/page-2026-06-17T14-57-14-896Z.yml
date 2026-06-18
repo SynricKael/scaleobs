@@ -1,0 +1,36 @@
+- generic [ref=e139]:
+  - banner [ref=e140]:
+    - generic [ref=e141]:
+      - button "返回" [ref=e142] [cursor=pointer]:
+        - img [ref=e143]
+      - generic [ref=e145]: "|"
+      - heading "Headscale 网络管理" [level=1] [ref=e146]
+      - generic [ref=e147]: 在线
+    - generic [ref=e148]:
+      - button "刷新面板" [ref=e149] [cursor=pointer]:
+        - img [ref=e150]
+      - button "在浏览器中打开" [ref=e155] [cursor=pointer]:
+        - img [ref=e156]
+  - iframe [active] [ref=e160]:
+    - generic [ref=f1e2]:
+      - main [ref=f1e3]:
+        - generic [ref=f1e4]:
+          - navigation [ref=f1e5]:
+            - generic [ref=f1e6]:
+              - button "Headscale" [ref=f1e7]:
+                - img [ref=f1e8]
+                - generic [ref=f1e10]: Headscale
+              - link "User View" [ref=f1e11]:
+                - /url: /p/headscale/web/users.html
+                - img [ref=f1e12]
+                - generic [ref=f1e14]: User View
+              - link "Device View" [ref=f1e15]:
+                - /url: /p/headscale/web/devices.html
+                - img [ref=f1e16]
+                - generic [ref=f1e18]: Device View
+              - link "Settings" [ref=f1e19]:
+                - /url: /p/headscale/web/settings.html
+                - img [ref=f1e20]
+                - generic [ref=f1e23]: Settings
+          - heading "User View" [level=1] [ref=f1e28]
+      - generic [ref=f1e29]: untitled page

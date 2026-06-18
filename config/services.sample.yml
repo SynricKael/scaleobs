@@ -1,0 +1,46 @@
+# ============================================================================
+# ScaleObs - Server Operations Portal Configuration (Sample)
+# ============================================================================
+# Copy this file to config/services.yml and fill in your values.
+
+gateway:
+    title: "ScaleObs"
+    port: 8080
+    auth:
+        enabled: true
+        jwt_secret: "change-me-to-a-random-secret"
+        users:
+            - username: "admin"
+              password: "change-me"
+
+# Headscale networks for automatic node discovery (support multiple)
+headscale_networks:
+#    - name: "primary"
+#      url: https://headscale.example.com:8444
+#      api_key: "your-headscale-api-key"
+
+# Remote Docker daemons to monitor via TCP API
+docker_hosts:
+#    - name: "my-server"
+#      host: "192.168.1.100"
+#      port: 2375
+
+# Coding agent annotations - tag hosts by IP with the agents they run
+host_agents:
+#    192.168.1.100: [codex]
+#    192.168.1.101: [claude code]
+
+# AI Agent Servers
+# agent_servers:
+#   - name: "Codex on Server"
+#     url: http://192.168.1.100:8080
+
+# Manually configured servers (complement headscale discovery)
+servers:
+    - id: main-server
+      name: "Main Server"
+      host: 127.0.0.1
+      agent_port: 9090
+      agent_token: "${AGENT_TOKEN}"
+      tags: [prod, main]
+      location: "local"

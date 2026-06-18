@@ -1,0 +1,32 @@
+# Go
+gateway/gateway-release.exe
+gateway/sop-agent.exe
+*.exe
+*.test
+*.out
+
+# Dashboard
+dashboard/node_modules/
+dashboard/dist/
+dashboard/src-tauri/target/
+
+# Agent dist
+dist/
+
+# Config
+config/services.yml
+start_gateway.bat
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

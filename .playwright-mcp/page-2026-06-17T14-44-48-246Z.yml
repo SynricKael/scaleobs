@@ -1,0 +1,44 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - link "frp" [ref=e7] [cursor=pointer]:
+        - /url: "#"
+      - generic [ref=e9]:
+        - switch
+        - generic [ref=e12] [cursor=pointer]: Light
+  - generic [ref=e15]:
+    - menubar [ref=e17]:
+      - menuitem "Overview" [ref=e18] [cursor=pointer]
+      - menuitem "Proxies" [ref=e19]:
+        - generic [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: Proxies
+          - img [ref=e23]
+      - menuitem "Help" [ref=e25] [cursor=pointer]
+    - generic [ref=e32]:
+      - group "Version" [ref=e33]:
+        - generic [ref=e34]: Version
+        - generic [ref=e36]: 0.52.3
+      - group "BindPort" [ref=e37]:
+        - generic [ref=e38]: BindPort
+        - generic [ref=e40]: "7000"
+      - group "Max PoolCount" [ref=e41]:
+        - generic [ref=e42]: Max PoolCount
+        - generic [ref=e44]: "5"
+      - group "Max Ports Per Client" [ref=e45]:
+        - generic [ref=e46]: Max Ports Per Client
+        - generic [ref=e48]: no limit
+      - group "Allow Ports" [ref=e49]:
+        - generic [ref=e50]: Allow Ports
+      - group "HeartBeat Timeout" [ref=e52]:
+        - generic [ref=e53]: HeartBeat Timeout
+        - generic [ref=e55]: "90"
+      - group "Client Counts" [ref=e56]:
+        - generic [ref=e57]: Client Counts
+        - generic [ref=e59]: "1"
+      - group "Current Connections" [ref=e60]:
+        - generic [ref=e61]: Current Connections
+        - generic [ref=e63]: "6"
+      - group "Proxy Counts" [ref=e64]:
+        - generic [ref=e65]: Proxy Counts
+        - generic [ref=e67]: "5"
+  - contentinfo
