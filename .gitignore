@@ -16,6 +16,7 @@ dist/
 # Config
 config/services.yml
 start_gateway.bat
+gateway/run-gateway-service.ps1
 
 # IDE
 .idea/
