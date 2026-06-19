@@ -123,8 +123,17 @@ func (hub *AgentHub) SyncHeadscaleNodes(nodes []HeadscaleNode) {
 
 		id := "hs-" + primaryIP
 
-		// Skip if already exists and is connected via agent (agent data is more recent)
+		// If already exists and connected via agent, just update name/host if missing
 		if existing, ok := hub.servers[id]; ok && existing.Connected && existing.Source == "agent" {
+			if existing.Name == "" && n.Name != "" {
+				existing.Name = n.Name
+			}
+			if existing.Host == "" && primaryIP != "" {
+				existing.Host = primaryIP
+			}
+			if n.NetworkName != "" {
+				existing.Network = n.NetworkName
+			}
 			continue
 		}
 

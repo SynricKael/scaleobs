@@ -26,15 +26,17 @@ fn open_panel(url: String, title: String) -> Result<(), String> {
     Ok(())
 }
 
-fn find_observer_root() -> Option<std::path::PathBuf> {
+fn find_project_root() -> Option<std::path::PathBuf> {
     let exe_path = std::env::current_exe().ok()?;
+    // exe is at <project>/dashboard/src-tauri/target/debug/scaleobs.exe (debug)
+    // or  <project>/dashboard/src-tauri/target/release/scaleobs.exe (release)
     Some(
         exe_path
-            .parent()? // release/
+            .parent()? // debug/ or release/
             .parent()? // target/
             .parent()? // src-tauri/
             .parent()? // dashboard/
-            .parent()? // Observer/
+            .parent()? // project root (Observer/)
             .to_path_buf(),
     )
 }
@@ -83,9 +85,9 @@ fn wait_for_gateway(port: u16, max_retries: u32) -> bool {
 }
 
 fn spawn_gateway_process() -> Option<Child> {
-    let observer_root = find_observer_root()?;
-    let gateway_exe = observer_root.join("gateway-release.exe");
-    let config_path = observer_root.join("config/services.yml");
+    let project_root = find_project_root()?;
+    let gateway_exe = project_root.join("gateway/gateway-release.exe");
+    let config_path = project_root.join("config/services.yml");
 
     if !gateway_exe.exists() {
         eprintln!("[sop] gateway-release.exe not found at {:?}", gateway_exe);

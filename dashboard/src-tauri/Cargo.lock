@@ -2772,6 +2772,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "scaleobs"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "open",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-log",
+]
+
+[[package]]
 name = "schemars"
 version = "0.8.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3098,19 +3111,6 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "sop-client"
-version = "0.1.0"
-dependencies = [
- "log",
- "open",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-log",
 ]
 
 [[package]]

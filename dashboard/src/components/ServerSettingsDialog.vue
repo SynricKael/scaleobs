@@ -122,7 +122,7 @@
                   :class="agent.online ? 'bg-green-500' : 'bg-gray-400'"
                 ></span>
                 <span class="text-sm text-gray-700 dark:text-gray-300">{{ agent.name }}</span>
-                <span class="text-xs text-gray-400">{{ agent.type }}</span>
+                <span class="text-xs text-gray-400">{{ agent.url }}</span>
               </div>
               <span v-if="agent.error" class="text-xs text-red-400">{{ agent.error }}</span>
             </div>
@@ -212,7 +212,7 @@ const emit = defineEmits<{
 }>()
 
 const activeTab = ref<'ssh' | 'group' | 'aiagent'>('ssh')
-const tabs = [
+const tabs: { key: 'ssh' | 'group' | 'aiagent'; label: string }[] = [
   { key: 'ssh', label: 'SSH' },
   { key: 'group', label: '分组' },
   { key: 'aiagent', label: 'AI Agent' },
