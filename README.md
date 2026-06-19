@@ -21,6 +21,49 @@ ScaleObs is a self-hosted operations portal that auto-discovers servers via [Hea
 - **YAML configuration** — Edit `services.yml` via Settings page or add entries through the UI
 - **Agent binary distribution** — Download pre-built agent binaries for Linux, macOS, and Windows
 
+## Positioning
+
+ScaleObs is **not** a replacement for Grafana, Portainer, or Prometheus — it stands **in front of them.**
+
+```
+                    ┌──────────────────┐
+                    │    ScaleObs      │  ← First glance: every server at a glance
+                    │  "At a glance"   │
+                    └──────┬───────────┘
+                           │
+            ┌──────────────┼──────────────┐
+            │              │              │
+     ┌──────▼─────┐ ┌─────▼──────┐ ┌─────▼──────┐
+     │  Grafana   │ │  Portainer │ │ Headscale  │  ← Drill down when needed
+     │  trends    │ │ containers │ │ nodes      │
+     └────────────┘ └────────────┘ └────────────┘
+```
+
+### Problems other tools don't solve
+
+| Problem | Existing tools | ScaleObs |
+|---------|---------------|----------|
+| "What's the overall state of my 10 servers?" | Grafana needs Prometheus per host + manual dashboards | Install one agent and it appears |
+| "Which nodes are running AI coding agents?" | No tool can answer this | Purple badges at a glance |
+| "I added a Mac Mini to Tailscale, I want to see it" | Manually add targets in Grafana, endpoints in Portainer | Auto-syncs from Headscale, appears instantly |
+| "I want to see all services on one page" | 5 browser tabs open | One page, all covered |
+| "My cheap 2C4G VPS can barely run, what monitoring fits?" | Prometheus + Grafana eat 1GB RAM | Agent is < 20MB |
+
+### What ScaleObs really does
+
+- **Auto-discovery** — Server joins Tailscale → appears on dashboard. This is the core differentiator.
+- **Ultra-lightweight** — One binary, zero dependencies. Perfect for resource-constrained edge nodes.
+- **AI Agent awareness** — Unique feature with no equivalent in the ecosystem.
+- **Single entry point** — No more switching between 5 panels. ScaleObs is your first stop.
+- **Simple config** — One YAML file handles everything.
+
+### When ScaleObs truly shines
+
+- You have **3+ machines** scattered across home, cloud, and office
+- You use **Tailscale** for networking
+- You run **AI coding agents** (OpenCode / Codex / Claude Code)
+- You want to know **"is everything OK right now"** — not query historical trends
+
 ## Architecture
 
 ```
