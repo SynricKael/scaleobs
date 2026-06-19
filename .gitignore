@@ -1,33 +1,93 @@
-# Go
-gateway/gateway-release.exe
-gateway/sop-agent.exe
+# ============================================
+# Build artifacts — ALL compiled binaries
+# ============================================
 *.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 *.test
 *.out
+*.o
+*.obj
 
-# Dashboard
+# ============================================
+# Go
+# ============================================
+gateway/gateway-release
+gateway/sop-agent
+agent/scaleobs-agent
+
+# ============================================
+# Dashboard / Frontend
+# ============================================
 dashboard/node_modules/
 dashboard/dist/
 dashboard/src-tauri/target/
 
-# Agent dist
+# ============================================
+# Agent distribution
+# ============================================
 dist/
+agent/dist/
 
-# Config
+# ============================================
+# Config — real secrets (keep sample only)
+# ============================================
 config/services.yml
-start_gateway.bat
-gateway/run-gateway-service.ps1
+config/*.yaml
+config/*.yml
+!config/services.sample.yml
 
-# IDE
+# ============================================
+# Environment & secrets
+# ============================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*-key.pem
+id_rsa*
+id_ed25519*
+*.cert
+
+# ============================================
+# Launch scripts with embedded secrets
+# ============================================
+start_gateway.bat
+start-sop.ps1
+gateway/run-gateway-service.ps1
+*start*.bat
+*start*.ps1
+
+# ============================================
+# IDE & Editor
+# ============================================
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
+*.orig
+*.bak
 
+# ============================================
 # OS
+# ============================================
 .DS_Store
 Thumbs.db
+Desktop.ini
+ehthumbs.db
 
-# Logs
+# ============================================
+# Logs & Temp
+# ============================================
 *.log
+*.tmp
+*.temp
+
+# ============================================
+# Playwright MCP (local tooling)
+# ============================================
+.playwright-mcp/
