@@ -1,8 +1,8 @@
 # ScaleObs
 
-**Server observation and coding agent management dashboard.**
+**Lightweight distributed node & container overview dashboard.**
 
-ScaleObs is a self-hosted operations portal that auto-discovers servers via [Headscale](https://headscale.net/), monitors them via a lightweight agent, and shows CPU/memory/disk/network/Docker/coding agents in a single dashboard.
+Auto-discover Headscale / Tailscale nodes, deploy a tiny agent (<20MB) on each host for read-only resource & container monitoring. Single-page dashboard for cluster health, AI workload badges, and highlighted anomalies — complements Grafana & Portainer for quick fault locating instead of replacing them.
 
 ![Dashboard](https://img.shields.io/badge/status-active-brightgreen)
 ![Go](https://img.shields.io/badge/Go-1.22%2B-blue)
@@ -10,20 +10,24 @@ ScaleObs is a self-hosted operations portal that auto-discovers servers via [Hea
 
 ---
 
-## Features
+## Why ScaleObs
 
-- **Auto-discovery** — Pulls server nodes from one or more Headscale networks
-- **Lightweight agent** — Installs on each host; reports CPU, memory, disk, network, Docker containers
-- **Coding agent detection** — Auto-detects `opencode`, `codex`, `claude code` running on each host; shows badges on server cards
-- **Remote Docker monitoring** — Polls remote Docker daemons via TCP API, merges container info into server status
-- **AI Agent Server panel** — Shows detected coding agents; manually add entries for unreachable hosts
-- **Dashboard** — Tauri + Vue 3 desktop app with sections for servers, networks, agent servers, and service tiles
-- **YAML configuration** — Edit `services.yml` via Settings page or add entries through the UI
-- **Agent binary distribution** — Download pre-built agent binaries for Linux, macOS, and Windows
+In parallel development of containerized microservices, developers commonly face tangled operational problems:
 
-## Positioning
+**Scattered microservices, slow fault location**  
+Services run across cloud servers, local boxes, and edge devices. When a container goes down, there's no global overview — you have to SSH into each machine and run `docker ps` one by one.
 
-ScaleObs is **not** a replacement for Grafana, Portainer, or Prometheus — it stands **in front of them.**
+**Isolated toolchains, messy remote management**  
+Grafana for metrics, Portainer for containers, Headscale for node management. You switch between a dozen browser tabs with scattered credentials. Adding a new node means configuring every platform from scratch.
+
+**Cross-region network jitter masks real failures**  
+Tailscale / Headscale tunnels jitter and time out frequently. It's hard to tell whether a service actually crashed or the network just glitched, leading to false restarts and wasted time.
+
+Traditional Prometheus + cAdvisor stack is bloated, heavy on memory, painful to configure per node, and overkill for small-scale teams or edge hardware.
+
+### Positioning
+
+ScaleObs is designed as a **top-level summary portal** rather than a replacement for any existing tool:
 
 ```
                     ┌──────────────────┐
@@ -39,6 +43,8 @@ ScaleObs is **not** a replacement for Grafana, Portainer, or Prometheus — it s
      └────────────┘ └────────────┘ └────────────┘
 ```
 
+Each node runs a tiny agent (<20MB) to read host & container metrics in read-only mode. Integrated with Headscale, newly joined nodes are auto-discovered and appear automatically. Single-page dashboard displays overall node health, container status and AI workload tags with highlighted exceptions. One-click jump to Grafana for trends, Portainer for container ops, or Headscale for network config — solving observability fragmentation with minimal overhead.
+
 ### Problems other tools don't solve
 
 | Problem | Existing tools | ScaleObs |
@@ -49,20 +55,22 @@ ScaleObs is **not** a replacement for Grafana, Portainer, or Prometheus — it s
 | "I want to see all services on one page" | 5 browser tabs open | One page, all covered |
 | "My cheap 2C4G VPS can barely run, what monitoring fits?" | Prometheus + Grafana eat 1GB RAM | Agent is < 20MB |
 
-### What ScaleObs really does
-
-- **Auto-discovery** — Server joins Tailscale → appears on dashboard. This is the core differentiator.
-- **Ultra-lightweight** — One binary, zero dependencies. Perfect for resource-constrained edge nodes.
-- **AI Agent awareness** — Unique feature with no equivalent in the ecosystem.
-- **Single entry point** — No more switching between 5 panels. ScaleObs is your first stop.
-- **Simple config** — One YAML file handles everything.
-
 ### When ScaleObs truly shines
 
 - You have **3+ machines** scattered across home, cloud, and office
-- You use **Tailscale** for networking
+- You use **Tailscale** / Headscale for networking
 - You run **AI coding agents** (OpenCode / Codex / Claude Code)
 - You want to know **"is everything OK right now"** — not query historical trends
+
+## Core Features
+
+- **Ultra-light agent** — Single binary, ~20MB memory footprint, zero dependencies. Perfect for edge nodes
+- **Auto node discovery** — Nodes join Tailscale → appear on dashboard automatically, no manual setup
+- **Host & container monitoring** — Real-time CPU, memory, disk, network; read-only Docker container status
+- **AI workload identification** — Exclusive badges for OpenCode, Claude Code, and other coding agents
+- **Global exception highlighting** — Spot crashes, OOM, and frequent restarts at a glance
+- **One-click jump links** — Grafana for trends, Portainer for container ops, Headscale for node config
+- **Simple YAML configuration** — Single config file handles everything
 
 ## Architecture
 
