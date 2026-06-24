@@ -35,6 +35,27 @@ host_agents:
 #   - name: "Codex on Server"
 #     url: http://192.168.1.100:8080
 
+# Per-server overrides - Docker connection, SSH, and group for any server
+# (works for headscale-discovered, agent-connected, and manually configured servers)
+# server_overrides:
+#     - id: hs-100.64.0.4
+#       group: production
+#       ssh:
+#           host: 100.64.0.4
+#           port: 22
+#           user: root
+#           password: ""
+#       docker:
+#           mode: api               # "agent" (default) or "api"
+#           host: 100.64.0.4
+#           port: 2375
+#           tls: false
+#           # tls_ca_cert: /etc/docker/ca.pem   # file path or inline PEM
+#           # tls_cert: /etc/docker/cert.pem
+#           # tls_key: /etc/docker/key.pem
+#     - id: hs-100.64.0.3
+#       group: staging
+
 # Manually configured servers (complement headscale discovery)
 servers:
     - id: main-server

@@ -22,6 +22,20 @@ type dockerContainerJSON struct {
 	Status  string   `json:"Status"`
 	Ports   []dockerPortJSON `json:"Ports"`
 	Created int64    `json:"Created"`
+	HostConfig *dockerHostConfigJSON `json:"HostConfig,omitempty"`
+	NetworkSettings *dockerNetworkSettingsJSON `json:"NetworkSettings,omitempty"`
+}
+
+type dockerHostConfigJSON struct {
+	NetworkMode string `json:"NetworkMode"`
+}
+
+type dockerNetworkSettingsJSON struct {
+	Networks map[string]dockerNetworkJSON `json:"Networks,omitempty"`
+}
+
+type dockerNetworkJSON struct {
+	NetworkID string `json:"NetworkID"`
 }
 
 type dockerPortJSON struct {
@@ -71,14 +85,29 @@ func CollectDockerContainers() ([]model.DockerContainer, *model.DockerStats) {
 		// Format ports
 		ports := formatDockerPorts(c.Ports)
 
+		// Extract network names
+		var networks []string
+		if c.NetworkSettings != nil && c.NetworkSettings.Networks != nil {
+			for netName := range c.NetworkSettings.Networks {
+				networks = append(networks, netName)
+			}
+		}
+		if len(networks) == 0 && c.HostConfig != nil && c.HostConfig.NetworkMode != "" && c.HostConfig.NetworkMode != "default" {
+			networks = []string{c.HostConfig.NetworkMode}
+		}
+		if len(networks) == 0 {
+			networks = []string{"bridge"}
+		}
+
 		dc := model.DockerContainer{
-			ID:      c.ID[:12], // short ID
-			Name:    name,
-			Image:   c.Image,
-			State:   c.State,
-			Status:  c.Status,
-			Ports:   ports,
-			Created: c.Created,
+			ID:       c.ID[:12], // short ID
+			Name:     name,
+			Image:    c.Image,
+			State:    c.State,
+			Status:   c.Status,
+			Ports:    ports,
+			Networks: networks,
+			Created:  c.Created,
 		}
 		result = append(result, dc)
 

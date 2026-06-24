@@ -15,8 +15,16 @@
 # Go
 # ============================================
 gateway/gateway-release
+gateway/gateway-*
 gateway/sop-agent
 agent/scaleobs-agent
+agent/scaleobs-agent-*
+
+# ============================================
+# Cookies (web scraping artifacts)
+# ============================================
+cookies*.txt
+oc_cookies*.txt
 
 # ============================================
 # Dashboard / Frontend

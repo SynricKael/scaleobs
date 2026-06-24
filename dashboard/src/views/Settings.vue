@@ -2,7 +2,9 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { SettingsIcon, ArrowLeftIcon, DownloadIcon, ServerIcon, CogIcon, SunIcon, MoonIcon } from '@lucide/vue'
+import { useConnectionStore } from '@/stores/connection'
+import { getApiBase } from '@/api'
+import { SettingsIcon, ArrowLeftIcon, DownloadIcon, ServerIcon, CogIcon, SunIcon, MoonIcon, WifiIcon, WifiOffIcon } from '@lucide/vue'
 
 interface Platform {
   os: string
@@ -12,6 +14,7 @@ interface Platform {
 
 const router = useRouter()
 const auth = useAuthStore()
+const conn = useConnectionStore()
 
 const content = ref('')
 const saved = ref(false)
@@ -20,12 +23,80 @@ const saving = ref(false)
 const loading = ref(true)
 const platforms = ref<Platform[]>([])
 
+// ──────────── Gateway connection state ────────────
+const connMode = ref(conn.mode)
+const remoteUrl = ref(conn.gatewayUrl)
+const connTesting = ref(false)
+const connOk = ref(false)
+const connError = ref('')
+const connLatency = ref(0)
+const justApplied = ref(false)
+
+async function testRemoteConnection(url: string) {
+  connTesting.value = true
+  connOk.value = false
+  connError.value = ''
+  connLatency.value = 0
+  try {
+    const testUrl = `${url}/api/health`
+    const start = performance.now()
+    const res = await fetch(testUrl, { method: 'GET', signal: AbortSignal.timeout(8000) })
+    connLatency.value = Math.round(performance.now() - start)
+    if (res.ok) {
+      connOk.value = true
+      connError.value = ''
+    } else {
+      connError.value = `HTTP ${res.status}`
+    }
+  } catch (e: any) {
+    connError.value = e.name === 'TimeoutError' ? '连接超时（8秒）' : (e.message || '连接失败')
+    connOk.value = false
+  } finally {
+    connTesting.value = false
+  }
+}
+
+async function applyConnection() {
+  if (connMode.value === 'remote') {
+    if (!remoteUrl.value || !remoteUrl.value.startsWith('http')) {
+      connError.value = '请输入有效的 URL（以 http:// 或 https:// 开头）'
+      return
+    }
+    // Test before applying
+    await testRemoteConnection(remoteUrl.value)
+    if (!connOk.value) return
+    conn.setRemote(remoteUrl.value)
+  } else {
+    conn.setLocal()
+    connOk.value = true
+    connError.value = ''
+    connLatency.value = 0
+  }
+  justApplied.value = true
+  setTimeout(() => { justApplied.value = false }, 3000)
+  // Re-fetch settings data from the new Gateway
+  fetchConfig()
+}
+
+// ──────────── Config fetch ────────────
+async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
+  const base = getApiBase()
+  const url = base ? `${base}${path}` : path
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...options?.headers,
+      Authorization: `Bearer ${auth.token}`,
+    },
+  })
+}
+
 async function fetchConfig() {
   loading.value = true
   try {
     const [cfgRes, platRes] = await Promise.all([
-      fetch('/api/config', { headers: { Authorization: `Bearer ${auth.token}` } }),
-      fetch('/api/agent/platforms', { headers: { Authorization: `Bearer ${auth.token}` } }),
+      apiFetch('/api/config'),
+      apiFetch('/api/agent/platforms'),
     ])
     if (cfgRes.ok) {
       const data = await cfgRes.json()
@@ -47,12 +118,9 @@ async function saveConfig() {
   saved.value = false
   error.value = ''
   try {
-    const res = await fetch('/api/config', {
+    const res = await apiFetch('/api/config', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${auth.token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: content.value }),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -67,7 +135,8 @@ async function saveConfig() {
 
 function downloadAgent(p: Platform) {
   const a = document.createElement('a')
-  a.href = `/api/agent/download/${p.os}/${p.arch}`
+  const base = getApiBase()
+  a.href = base ? `${base}/api/agent/download/${p.os}/${p.arch}` : `/api/agent/download/${p.os}/${p.arch}`
   a.download = `sop-agent-${p.os}-${p.arch}`
   a.click()
 }
@@ -83,16 +152,16 @@ function platformIcon(os: string): string {
 
 function installCommand(p: Platform): string {
   const token = 'sop-agent-token-2024'
-  const url = 'ws://localhost:8080'
-  const id = 'my-server'
+  const base = getApiBase() || 'http://localhost:8080'
+  const wsBase = base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
   if (p.os === 'linux') {
-    return `# 下载\nwget http://localhost:8080/api/agent/download/${p.os}/${p.arch} -O /usr/local/bin/sop-agent\nchmod +x /usr/local/bin/sop-agent\n\n# 启动 (设为 systemd 服务可持久化)\nexport GATEWAY_URL=${url}\nexport SERVER_ID=${id}\nexport AGENT_TOKEN=${token}\nsop-agent &`
+    return `# 下载\nwget ${base}/api/agent/download/${p.os}/${p.arch} -O /usr/local/bin/sop-agent\nchmod +x /usr/local/bin/sop-agent\n\n# 启动 (设为 systemd 服务可持久化)\nexport GATEWAY_URL=${wsBase}\nexport AGENT_TOKEN=${token}\nsop-agent &`
   }
   if (p.os === 'darwin') {
-    return `# 下载\ncurl -o /usr/local/bin/sop-agent http://localhost:8080/api/agent/download/${p.os}/${p.arch}\nchmod +x /usr/local/bin/sop-agent\n\n# 启动\nexport GATEWAY_URL=${url}\nexport SERVER_ID=${id}\nexport AGENT_TOKEN=${token}\nsop-agent &`
+    return `# 下载\ncurl -o /usr/local/bin/sop-agent ${base}/api/agent/download/${p.os}/${p.arch}\nchmod +x /usr/local/bin/sop-agent\n\n# 启动\nexport GATEWAY_URL=${wsBase}\nexport AGENT_TOKEN=${token}\nsop-agent &`
   }
   if (p.os === 'windows') {
-    return `# PowerShell (管理员)\nInvoke-WebRequest -Uri "http://localhost:8080/api/agent/download/${p.os}/${p.arch}" -OutFile "sop-agent.exe"\n\n$env:GATEWAY_URL="${url}"\n$env:SERVER_ID="${id}"\n$env:AGENT_TOKEN="${token}"\n.\\sop-agent.exe`
+    return `# PowerShell (管理员)\nInvoke-WebRequest -Uri "${base}/api/agent/download/${p.os}/${p.arch}" -OutFile "sop-agent.exe"\n\n$env:GATEWAY_URL="${wsBase}"\n$env:AGENT_TOKEN="${token}"\n.\\sop-agent.exe`
   }
   return ''
 }
@@ -134,6 +203,84 @@ onMounted(fetchConfig)
       <div v-if="error && !platforms.length" class="bg-red-900/50 border border-red-700 rounded-lg p-4 text-red-200">
         {{ error }}
       </div>
+
+      <!-- ========== Gateway 连接 ========== -->
+      <section>
+        <div class="flex items-center gap-2 mb-4">
+          <WifiIcon class="w-5 h-5 text-green-400" />
+          <h2 class="text-base font-semibold">Gateway 连接</h2>
+          <span class="text-xs text-gray-500">— 选择连接到本地或远程 Gateway</span>
+        </div>
+
+        <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-4 space-y-4">
+          <!-- Mode selector -->
+          <div class="flex gap-6">
+            <label class="flex items-center gap-2 cursor-pointer group">
+              <input type="radio" v-model="connMode" value="local" class="accent-green-500" />
+              <span class="text-sm text-gray-300 group-hover:text-gray-100 transition-colors">本地 Gateway</span>
+              <span class="text-xs text-gray-600">(127.0.0.1:8080)</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer group">
+              <input type="radio" v-model="connMode" value="remote" class="accent-blue-500" />
+              <span class="text-sm text-gray-300 group-hover:text-gray-100 transition-colors">远程 Gateway</span>
+            </label>
+          </div>
+
+          <!-- Remote URL input -->
+          <div v-if="connMode === 'remote'" class="space-y-3">
+            <div class="flex items-center gap-2">
+              <input
+                v-model="remoteUrl"
+                type="text"
+                class="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm font-mono text-gray-200 focus:outline-none focus:border-blue-500 placeholder-gray-600"
+                placeholder="https://8.135.39.171:8444"
+              />
+              <button
+                @click="testRemoteConnection(remoteUrl)"
+                :disabled="connTesting || !remoteUrl"
+                class="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-lg transition-colors"
+              >
+                {{ connTesting ? '测试中...' : '测试' }}
+              </button>
+              <button
+                @click="applyConnection"
+                class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg transition-colors"
+              >
+                应用
+              </button>
+            </div>
+
+            <!-- Connection status -->
+            <div v-if="connOk || connError" class="flex items-center gap-2 text-xs">
+              <template v-if="connOk">
+                <span class="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                <span class="text-green-400">
+                  {{ connLatency > 0 ? `已连接（${connLatency}ms）` : '已连接' }}
+                </span>
+              </template>
+              <template v-else>
+                <span class="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                <span class="text-red-400">{{ connError }}</span>
+              </template>
+            </div>
+          </div>
+
+          <!-- Local mode hint -->
+          <div v-if="connMode === 'local'" class="flex items-center gap-2 text-xs text-gray-500">
+            <WifiOffIcon class="w-3.5 h-3.5" />
+            <span>使用本地 Gateway（默认）— 与本机 127.0.0.1:8080 通信</span>
+          </div>
+
+          <!-- Applied feedback -->
+          <div
+            v-if="justApplied"
+            class="text-xs text-green-400 bg-green-900/20 rounded px-3 py-1.5 flex items-center gap-1.5"
+          >
+            <span class="w-1.5 h-1.5 rounded-full bg-green-400" />
+            {{ connMode === 'remote' ? `已切换到远程 Gateway: ${conn.gatewayUrl}` : '已切换到本地 Gateway' }}
+          </div>
+        </div>
+      </section>
 
       <!-- ========== Agent 下载 ========== -->
       <section>

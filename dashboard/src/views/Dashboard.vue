@@ -23,6 +23,7 @@ import {
   XIcon,
   SunIcon,
   MoonIcon,
+  SearchIcon,
 } from '@lucide/vue'
 import type { ServerStatus, AgentServerStatus } from '@/types'
 import { ref } from 'vue'
@@ -33,13 +34,29 @@ const gw = useGatewayStore()
 
 const agentServers = ref<AgentServerStatus[]>([])
 const showAddModal = ref(false)
+const showDiscoverModal = ref(false)
+const discovering = ref(false)
+const addingDiscovered = ref(false)
+const discoveredList = ref<DiscoveredAgent[]>([])
 const addForm = ref({ name: '', url: '', type: 'opencode', user: '', password: '' })
+
+const lastRefreshed = ref('')
 
 const knownAgentPorts: Record<string, number> = {
   opencode: 4096,
+  codex: 8080,
+  'claude code': 8080,
 }
 
-const lastRefreshed = ref('')
+interface DiscoveredAgent {
+  key: string
+  agent: string
+  type: string
+  host: string
+  serverName: string
+  online: boolean
+  checked: boolean
+}
 
 async function fetchAgentServers() {
   try {
@@ -50,7 +67,66 @@ async function fetchAgentServers() {
   }
 }
 
+function openDiscoverModal() {
+  showDiscoverModal.value = true
+  discovering.value = true
+  discoveredList.value = []
+  // Build discovered agent list from all servers
+  const seen = new Set<string>()
+  const list: DiscoveredAgent[] = []
+  const configuredNames = new Set(agentServers.value.map(a => a.name + a.url))
+  for (const s of gw.servers) {
+    const allAgents = new Set<string>()
+    if (s.agents) s.agents.forEach(a => allAgents.add(a))
+    if (s.metrics?.agents) s.metrics.agents.forEach(a => allAgents.add(a))
+    for (const agent of allAgents) {
+      const key = `${s.host || s.id}/${agent}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      // Skip if already configured
+      const guessName = `${s.name || s.host || s.id} · ${agent}`
+      const guessUrl = `http://${s.host || 'localhost'}:${knownAgentPorts[agent] || 4096}`
+      if (configuredNames.has(guessName + guessUrl)) continue
+      list.push({
+        key,
+        agent: guessName,
+        type: agent,
+        host: s.host || '',
+        serverName: s.name || s.id,
+        online: s.online,
+        checked: false,
+      })
+    }
+  }
+  discoveredList.value = list
+  discovering.value = false
+}
+
+async function submitDiscovered() {
+  const selected = discoveredList.value.filter(d => d.checked)
+  if (selected.length === 0) return
+  addingDiscovered.value = true
+  let added = 0
+  for (const da of selected) {
+    try {
+      await agentServersApi.add({
+        name: da.agent,
+        url: `http://${da.host}:${knownAgentPorts[da.type] || 4096}`,
+      })
+      added++
+    } catch {
+      // individual failures don't block the rest
+    }
+  }
+  addingDiscovered.value = false
+  showDiscoverModal.value = false
+  if (added > 0) {
+    await fetchAgentServers()
+  }
+}
+
 const activeGroupFilter = ref('')
+const sortKey = ref<'name' | 'host' | 'last_seen'>('last_seen')
 
 // Extract unique groups from servers
 const serverGroups = computed(() => {
@@ -61,29 +137,34 @@ const serverGroups = computed(() => {
   return Array.from(groups).sort()
 })
 
-// Filter servers by active group
+// Filter & sort servers
 const filteredServers = computed(() => {
-  if (!activeGroupFilter.value) return gw.servers
-  return gw.servers.filter(s => s.group === activeGroupFilter.value)
+  let list = gw.servers
+  if (activeGroupFilter.value) {
+    list = list.filter(s => s.group === activeGroupFilter.value)
+  }
+  // Sort
+  const sorted = [...list]
+  sorted.sort((a, b) => {
+    let cmp = 0
+    if (sortKey.value === 'name') {
+      const na = (a.name || a.id || '').toLowerCase()
+      const nb = (b.name || b.id || '').toLowerCase()
+      cmp = na.localeCompare(nb)
+    } else if (sortKey.value === 'host') {
+      const ha = (a.host || '').toLowerCase()
+      const hb = (b.host || '').toLowerCase()
+      cmp = ha.localeCompare(hb)
+    } else {
+      // last_seen descending (newest first)
+      cmp = (b.last_seen || 0) - (a.last_seen || 0)
+    }
+    return cmp
+  })
+  return sorted
 })
 
-// Gather detected agents from servers (auto-detected + host_agents annotations)
-const detectedAgents = computed(() => {
-  const list: { name: string; host: string; agent: string; online: boolean }[] = []
-  for (const s of gw.servers) {
-    const allAgents = new Set<string>()
-    // From host_agents config annotation (top-level agents field)
-    if (s.agents) s.agents.forEach((a) => allAgents.add(a))
-    // From agent auto-detection via WebSocket metrics
-    if (s.metrics?.agents) s.metrics.agents.forEach((a) => allAgents.add(a))
-    if (allAgents.size > 0) {
-      for (const agent of allAgents) {
-        list.push({ name: s.name || s.id, host: s.host || '', agent, online: s.online })
-      }
-    }
-  }
-  return list
-})
+
 
 function openAddModal() {
   addForm.value = { name: '', url: '', type: 'opencode', user: '', password: '' }
@@ -111,10 +192,9 @@ interface NetworkInfo {
   label: string
   icon: string
   count: number
-  type: 'headscale' | 'agent' | 'config' | 'docker' | 'service'
-  filter?: (s: ServerStatus) => boolean
-  link?: string // external URL
-  panelId?: string // proxy panel ID
+  type: 'headscale' | 'service'
+  link?: string
+  panelId?: string
 }
 
 const networks = computed<NetworkInfo[]>(() => {
@@ -137,42 +217,22 @@ const networks = computed<NetworkInfo[]>(() => {
       type: 'headscale',
     })
   }
-
-  // Agent-connected servers
-  const agentCount = gw.servers.filter(s => s.source === 'agent').length
-  if (agentCount > 0) {
-    result.push({
-      id: 'agent',
-      label: 'Agent 直连',
-      icon: 'monitor',
-      count: agentCount,
-      type: 'agent',
-    })
-  }
-
   return result
 })
 
-// Count Docker hosts (from Headscale nodes that also have Docker exposed)
-// For now just show as a static count if we detect Docker-enabled IPs
-const dockerCount = computed(() => {
+// Docker hosts with containers, for the services area
+const dockerHostsList = computed(() => {
   return gw.servers.filter(s =>
-    ['100.64.0.3', '100.64.0.4'].includes(s.host || '')
-  ).length
+    s.metrics?.docker_containers && s.metrics.docker_containers.length > 0
+  )
 })
-
-function handleNetworkClick(net: NetworkInfo) {
-  // Scroll to server section and filter? For now just navigate
-  // Since servers are already filtered by the network card click context,
-  // we'll implement filtering later with a ref
-}
 
 async function setWindowTitle() {
   try {
     const { getCurrentWindow } = await import('@tauri-apps/api/window')
-    await getCurrentWindow().setTitle('Novascale')
+    await getCurrentWindow().setTitle('ScaleObs')
   } catch {
-    document.title = 'Novascale'
+    document.title = 'ScaleObs'
   }
 }
 
@@ -229,6 +289,28 @@ function toggleTheme() {
         <div class="flex items-center gap-3 pl-1">
           <MonitorIcon class="w-5 h-5 text-indigo-400" />
           <h1 class="text-base font-bold">ScaleObs</h1>
+          <nav class="ml-6 flex items-center gap-1">
+            <button
+              @click="router.push('/')"
+              class="px-3 py-1.5 text-sm rounded-lg transition-colors"
+              :class="router.currentRoute?.value?.path === '/' || !router.currentRoute?.value?.path?.startsWith('/apps')
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'"
+            >
+              <ServerIcon class="w-4 h-4 inline-block mr-1" />
+              设备
+            </button>
+            <button
+              @click="router.push('/apps')"
+              class="px-3 py-1.5 text-sm rounded-lg transition-colors"
+              :class="router.currentRoute?.value?.path?.startsWith('/apps')
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'"
+            >
+              <Grid3X3Icon class="w-4 h-4 inline-block mr-1" />
+              应用
+            </button>
+          </nav>
         </div>
 
         <div class="flex items-center gap-3">
@@ -301,27 +383,40 @@ function toggleTheme() {
           <span class="text-xs text-gray-500">{{ filteredServers.length }} / {{ gw.servers.length }} 台</span>
         </div>
 
-        <!-- Group filter tabs -->
-        <div v-if="serverGroups.length > 0" class="flex flex-wrap gap-1.5 mb-4">
-          <button
-            @click="activeGroupFilter = ''"
-            class="px-3 py-1 text-xs rounded-lg border transition-colors"
-            :class="!activeGroupFilter
-              ? 'bg-blue-600 border-blue-500 text-white'
-              : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500'"
-          >
-            全部
-          </button>
-          <button
-            v-for="g in serverGroups" :key="g"
-            @click="activeGroupFilter = g"
-            class="px-3 py-1 text-xs rounded-lg border transition-colors"
-            :class="activeGroupFilter === g
-              ? 'bg-blue-600 border-blue-500 text-white'
-              : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500'"
-          >
-            {{ g }}
-          </button>
+        <!-- Group filter tabs + sort controls -->
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <div v-if="serverGroups.length > 0" class="flex flex-wrap gap-1.5">
+            <button
+              @click="activeGroupFilter = ''"
+              class="px-3 py-1 text-xs rounded-lg border transition-colors"
+              :class="!activeGroupFilter
+                ? 'bg-blue-600 border-blue-500 text-white'
+                : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500'"
+            >
+              全部
+            </button>
+            <button
+              v-for="g in serverGroups" :key="g"
+              @click="activeGroupFilter = g"
+              class="px-3 py-1 text-xs rounded-lg border transition-colors"
+              :class="activeGroupFilter === g
+                ? 'bg-blue-600 border-blue-500 text-white'
+                : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500'"
+            >
+              {{ g }}
+            </button>
+          </div>
+          <div class="flex-1"></div>
+          <div class="flex items-center gap-1 text-xs">
+            <span class="text-gray-500 mr-1">排序:</span>
+            <button v-for="opt in [{k:'name',l:'名称'},{k:'host',l:'IP'},{k:'last_seen',l:'加入时间'}]" :key="opt.k"
+              @click="sortKey = opt.k as any"
+              class="px-2.5 py-1 rounded-lg border transition-colors"
+              :class="sortKey === opt.k
+                ? 'bg-indigo-600 border-indigo-500 text-white'
+                : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500'"
+            >{{ opt.l }}</button>
+          </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -350,35 +445,14 @@ function toggleTheme() {
           >
             <div class="flex items-center justify-between mb-2">
               <div class="flex items-center gap-2">
-                <GlobeIcon v-if="net.icon === 'globe'" class="w-5 h-5 text-blue-400" />
-                <MonitorIcon v-else-if="net.icon === 'monitor'" class="w-5 h-5 text-green-400" />
-                <ContainerIcon v-else class="w-5 h-5 text-cyan-400" />
+                <GlobeIcon class="w-5 h-5 text-blue-400" />
                 <span class="text-sm font-medium">{{ net.label }}</span>
               </div>
               <span class="text-xs bg-gray-700 text-gray-400 rounded-full px-2 py-0.5">
                 {{ net.count }} 台
               </span>
             </div>
-            <p class="text-xs text-gray-500 mt-1">
-              <template v-if="net.type === 'headscale'">通过 Headscale API 自动发现</template>
-              <template v-else-if="net.type === 'agent'">通过 Agent WebSocket 直连</template>
-            </p>
-          </div>
-
-          <!-- Docker hosts card -->
-          <div
-            v-if="dockerCount > 0"
-            class="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:border-cyan-500 transition-colors cursor-pointer"
-            @click="router.push('/settings')"
-          >
-            <div class="flex items-center justify-between mb-2">
-              <div class="flex items-center gap-2">
-                <ContainerIcon class="w-5 h-5 text-cyan-400" />
-                <span class="text-sm font-medium">Docker</span>
-              </div>
-              <span class="text-xs bg-gray-700 text-gray-400 rounded-full px-2 py-0.5">{{ dockerCount }}</span>
-            </div>
-            <p class="text-xs text-gray-500 mt-1">通过 Docker TCP API 远程采集</p>
+            <p class="text-xs text-gray-500 mt-1">通过 Headscale API 自动发现</p>
           </div>
 
           <!-- FRPS -->
@@ -425,37 +499,59 @@ function toggleTheme() {
         </div>
       </section>
 
-      <!-- ============ AI Agent Server ============ -->
+      <!-- ============ Docker 容器 ============ -->
+      <section v-if="dockerHostsList.length > 0">
+        <div class="flex items-center gap-2 mb-4">
+          <ContainerIcon class="w-5 h-5 text-cyan-400" />
+          <h2 class="text-base font-semibold">容器</h2>
+          <span class="text-xs text-gray-500">— 所有服务器的 Docker 容器概览</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div
+            v-for="dh in dockerHostsList"
+            :key="dh.id"
+            class="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:border-cyan-500 transition-colors cursor-pointer"
+            @click="viewServer(dh.id)"
+          >
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2 min-w-0">
+                <ContainerIcon class="w-5 h-5 text-cyan-400 shrink-0" />
+                <span class="text-sm font-medium truncate">{{ dh.name || dh.host }}</span>
+              </div>
+              <span v-if="dh.metrics?.docker_stats" class="text-xs bg-gray-700 text-gray-400 rounded-full px-2 py-0.5 shrink-0 ml-2">
+                {{ dh.metrics.docker_stats.running }}/{{ dh.metrics.docker_stats.total }}
+              </span>
+            </div>
+            <div class="flex flex-wrap gap-1 mt-1">
+              <span
+                v-for="c in dh.metrics?.docker_containers?.slice(0, 6)"
+                :key="c.id"
+                class="text-xs px-1.5 py-0.5 rounded"
+                :class="c.state === 'running'
+                  ? 'bg-emerald-900/30 text-emerald-300'
+                  : 'bg-gray-700 text-gray-400'"
+              >
+                {{ c.name || c.id.slice(0, 8) }}
+              </span>
+              <span v-if="(dh.metrics?.docker_containers?.length || 0) > 6" class="text-xs text-gray-500 px-1">
+                +{{ (dh.metrics?.docker_containers?.length || 0) - 6 }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ AI Agent ============ -->
       <section>
         <div class="flex items-center gap-2 mb-4">
           <TerminalIcon class="w-5 h-5 text-purple-400" />
-          <h2 class="text-base font-semibold">AI Agent Server</h2>
+          <h2 class="text-base font-semibold">AI Agent</h2>
           <span class="text-xs text-gray-500">{{ agentServers.length }} 个已配置</span>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <!-- Detected agents from servers -->
-          <div
-            v-for="da in detectedAgents"
-            :key="da.host + '/' + da.agent"
-            class="bg-gray-800/70 border border-purple-800/40 rounded-lg p-4 hover:border-purple-500 transition-colors"
-          >
-            <div class="flex items-center justify-between mb-2">
-              <div class="flex items-center gap-2">
-                <span
-                  class="w-2 h-2 rounded-full inline-block shrink-0"
-                  :class="da.online ? 'bg-emerald-500' : 'bg-gray-500'"
-                />
-                <span class="text-sm font-medium">{{ da.agent }}</span>
-              </div>
-              <span class="text-xs px-1.5 py-0.5 rounded bg-purple-900/30 text-purple-300">
-                自动检测
-              </span>
-            </div>
-            <p class="text-xs text-gray-500 truncate">{{ da.name }} ({{ da.host || 'localhost' }})</p>
-          </div>
-
-          <!-- Configured agent servers -->
+          <!-- Configured agent servers (persistent even when offline) -->
           <div
             v-for="as in agentServers"
             :key="as.name"
@@ -463,15 +559,15 @@ function toggleTheme() {
             @click="openURL(as.url)"
           >
             <div class="flex items-center justify-between mb-2">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 min-w-0">
                 <span
                   class="w-2 h-2 rounded-full inline-block shrink-0"
                   :class="as.online ? 'bg-emerald-500' : 'bg-red-400'"
                 />
-                <span class="text-sm font-medium">{{ as.name }}</span>
+                <span class="text-sm font-medium truncate">{{ as.name }}</span>
               </div>
               <span
-                class="text-xs px-1.5 py-0.5 rounded"
+                class="text-xs px-1.5 py-0.5 rounded shrink-0 ml-2"
                 :class="as.online ? 'text-emerald-400 bg-emerald-900/30' : 'text-red-400 bg-red-900/30'"
               >
                 {{ as.online ? '在线' : '离线' }}
@@ -481,7 +577,17 @@ function toggleTheme() {
             <p v-if="as.error" class="text-xs text-red-400 mt-1 truncate">{{ as.error }}</p>
           </div>
 
-          <!-- Add agent server card -->
+          <!-- Search & discover agents card -->
+          <div
+            class="bg-gray-800 border border-dashed border-purple-700/50 rounded-lg p-4 hover:border-purple-500 hover:bg-gray-800 transition-colors cursor-pointer flex flex-col items-center justify-center"
+            @click="openDiscoverModal()"
+          >
+            <SearchIcon class="w-6 h-6 text-purple-400 mx-auto mb-1" />
+            <span class="text-sm text-purple-400">搜索发现</span>
+            <p class="text-xs text-gray-500 mt-1 text-center">扫描所有服务器上的 AI Agent</p>
+          </div>
+
+          <!-- Manual add -->
           <div
             class="bg-gray-800/50 border border-dashed border-gray-600 rounded-lg p-4 hover:border-purple-500 hover:bg-gray-800 transition-colors cursor-pointer flex items-center justify-center"
             @click="openAddModal()"
@@ -494,7 +600,96 @@ function toggleTheme() {
         </div>
       </section>
 
-      <!-- Add Agent Server Modal -->
+      <!-- ============ Discover Modal ============ -->
+      <div
+        v-if="showDiscoverModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+        @click.self="showDiscoverModal = false"
+      >
+        <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-lg mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-base font-semibold">搜索发现 AI Agent</h3>
+            <button @click="showDiscoverModal = false" class="p-1 hover:bg-gray-700 rounded-lg transition-colors">
+              <XIcon class="w-5 h-5 text-gray-400" />
+            </button>
+          </div>
+
+          <p class="text-sm text-gray-400 mb-4">
+            扫描 {{ gw.servers.length }} 台服务器的 Agent 数据和配置，勾选要添加的 AI Agent，确认后固化到配置中。
+          </p>
+
+          <!-- Loading -->
+          <div v-if="discovering" class="flex items-center justify-center py-8 text-gray-400">
+            <RefreshCwIcon class="w-5 h-5 animate-spin mr-2" />
+            正在扫描服务器...
+          </div>
+
+          <!-- Discovered agents list -->
+          <div v-else class="overflow-y-auto flex-1 space-y-2">
+            <div
+              v-for="da in discoveredList"
+              :key="da.key"
+              class="flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors cursor-pointer"
+              :class="da.checked
+                ? 'bg-purple-900/20 border-purple-700/50'
+                : 'bg-gray-800/50 border-gray-700 hover:border-gray-600'"
+              @click="da.checked = !da.checked"
+            >
+              <div
+                class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                :class="da.checked
+                  ? 'bg-purple-500 border-purple-500'
+                  : 'border-gray-500'"
+              >
+                <svg v-if="da.checked" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium text-gray-200">{{ da.agent }}</span>
+                  <span class="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">{{ da.type }}</span>
+                </div>
+                <p class="text-xs text-gray-500 truncate">{{ da.serverName }} ({{ da.host }})</p>
+              </div>
+              <span
+                class="w-2 h-2 rounded-full shrink-0"
+                :class="da.online ? 'bg-emerald-500' : 'bg-gray-500'"
+              />
+            </div>
+
+            <!-- Empty state -->
+            <div v-if="discoveredList.length === 0" class="text-center py-8 text-gray-500">
+              <SearchIcon class="w-8 h-8 mx-auto mb-2 text-gray-600" />
+              <p class="text-sm">未发现新的 AI Agent</p>
+              <p class="text-xs text-gray-600 mt-1">所有服务器上的 Agent 已全部配置</p>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="flex items-center justify-between mt-4 pt-4 border-t border-gray-700">
+            <span class="text-sm text-gray-400">
+              {{ discoveredList.filter(d => d.checked).length }} 个已选
+            </span>
+            <div class="flex gap-3">
+              <button
+                @click="showDiscoverModal = false"
+                class="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+              >取消</button>
+              <button
+                @click="submitDiscovered()"
+                :disabled="discoveredList.filter(d => d.checked).length === 0 || addingDiscovered"
+                class="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-500 disabled:opacity-40 rounded-lg transition-colors flex items-center gap-2"
+              >
+                <RefreshCwIcon v-if="addingDiscovered" class="w-3 h-3 animate-spin" />
+                添加所选
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ Manual Add Modal ============ -->
       <div
         v-if="showAddModal"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
@@ -502,7 +697,7 @@ function toggleTheme() {
       >
         <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-md mx-4">
           <div class="flex items-center justify-between mb-5">
-            <h3 class="text-base font-semibold">添加 Agent Server</h3>
+            <h3 class="text-base font-semibold">手动添加 Agent Server</h3>
             <button @click="showAddModal = false" class="p-1 hover:bg-gray-700 rounded-lg transition-colors">
               <XIcon class="w-5 h-5 text-gray-400" />
             </button>

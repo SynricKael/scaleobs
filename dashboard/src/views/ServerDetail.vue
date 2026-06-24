@@ -31,6 +31,35 @@ const loadingContainers = ref<Set<string>>(new Set())
 
 const server = computed(() => gw.servers.find(s => s.id === serverId))
 
+// Group Docker containers by network
+interface DockerNetworkGroup {
+  network: string
+  containers: any[]
+}
+const dockerByNetwork = computed<DockerNetworkGroup[]>(() => {
+  const containers = server.value?.metrics?.docker_containers
+  if (!containers || containers.length === 0) return []
+  const groups = new Map<string, any[]>()
+  for (const c of containers) {
+    const networks = (c as any).networks || ['bridge']
+    for (const net of networks) {
+      if (!groups.has(net)) groups.set(net, [])
+      groups.get(net)!.push(c)
+    }
+  }
+  const result: DockerNetworkGroup[] = []
+  for (const [network, list] of groups) {
+    result.push({ network, containers: list })
+  }
+  // Sort: 'bridge' last, others alphabetically
+  result.sort((a, b) => {
+    if (a.network === 'bridge') return 1
+    if (b.network === 'bridge') return -1
+    return a.network.localeCompare(b.network)
+  })
+  return result
+})
+
 function formatTime(unix: number): string {
   return new Date(unix * 1000).toLocaleString('zh-CN')
 }
@@ -178,74 +207,83 @@ onMounted(() => {
           </div>
         </section>
 
-        <!-- Docker containers -->
-        <section v-if="server.metrics?.docker_containers?.length">
+        <!-- Docker containers grouped by network -->
+        <section v-if="dockerByNetwork.length">
           <h2 class="flex items-center gap-2 text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3">
             <ContainerIcon class="w-5 h-5" /> 容器列表
-            <span class="text-xs text-gray-400 font-normal">({{ server.metrics.docker_containers.length }})</span>
+            <span class="text-xs text-gray-400 font-normal">({{ server?.metrics?.docker_containers?.length || 0 }})</span>
           </h2>
-          <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                  <th class="text-left py-2.5 px-4 text-gray-500 font-medium">状态</th>
-                  <th class="text-left py-2.5 px-4 text-gray-500 font-medium">名称</th>
-                  <th class="text-left py-2.5 px-4 text-gray-500 font-medium">镜像</th>
-                  <th class="text-left py-2.5 px-4 text-gray-500 font-medium hidden md:table-cell">端口</th>
-                  <th class="text-left py-2.5 px-4 text-gray-500 font-medium hidden md:table-cell">状态详情</th>
-                  <th class="text-left py-2.5 px-4 text-gray-500 font-medium hidden lg:table-cell">创建时间</th>
-                  <th class="text-left py-2.5 px-4 text-gray-500 font-medium w-24">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="c in server.metrics.docker_containers" :key="c.id"
-                  class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                  <td class="py-2.5 px-4">
-                    <component :is="containerIcon(c.state)"
-                      class="w-4 h-4"
-                      :class="c.state === 'running' ? 'text-emerald-500' : 'text-gray-400'" />
-                  </td>
-                  <td class="py-2.5 px-4 font-medium text-gray-800 dark:text-gray-200">{{ c.name }}</td>
-                  <td class="py-2.5 px-4 text-gray-500 font-mono text-xs">{{ c.image }}</td>
-                  <td class="py-2.5 px-4 text-gray-500 text-xs hidden md:table-cell">{{ c.ports || '-' }}</td>
-                  <td class="py-2.5 px-4 text-gray-500 text-xs hidden md:table-cell">{{ c.status }}</td>
-                  <td class="py-2.5 px-4 text-gray-400 text-xs hidden lg:table-cell">{{ formatTime(c.created) }}</td>
-                  <td class="py-2.5 px-4">
-                    <div class="flex gap-1 items-center">
-                      <button
-                        v-if="c.state !== 'running'"
-                        @click="containerAction(c.id, 'start')"
-                        :disabled="loadingContainers.has(c.id)"
-                        class="p-1 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 disabled:opacity-30"
-                        title="启动"
-                      >
-                        <LoaderIcon v-if="loadingContainers.has(c.id)" class="w-3.5 h-3.5 animate-spin" />
-                        <PlayIcon v-else class="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        v-if="c.state === 'running'"
-                        @click="containerAction(c.id, 'stop')"
-                        :disabled="loadingContainers.has(c.id)"
-                        class="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 disabled:opacity-30"
-                        title="停止"
-                      >
-                        <LoaderIcon v-if="loadingContainers.has(c.id)" class="w-3.5 h-3.5 animate-spin" />
-                        <SquareIcon v-else class="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        @click="containerAction(c.id, 'restart')"
-                        :disabled="loadingContainers.has(c.id)"
-                        class="p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-600 dark:text-amber-400 disabled:opacity-30"
-                        title="重启"
-                      >
-                        <LoaderIcon v-if="loadingContainers.has(c.id)" class="w-3.5 h-3.5 animate-spin" />
-                        <RotateCwIcon v-else class="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="space-y-4">
+            <div v-for="group in dockerByNetwork" :key="group.network"
+              class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <!-- Network header -->
+              <div class="flex items-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
+                <WifiIcon class="w-4 h-4 text-indigo-500" />
+                <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ group.network }}</span>
+                <span class="text-xs text-gray-400">({{ group.containers.length }})</span>
+              </div>
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b border-gray-100 dark:border-gray-700">
+                    <th class="text-left py-2 px-4 text-gray-500 font-medium">状态</th>
+                    <th class="text-left py-2 px-4 text-gray-500 font-medium">名称</th>
+                    <th class="text-left py-2 px-4 text-gray-500 font-medium">镜像</th>
+                    <th class="text-left py-2 px-4 text-gray-500 font-medium hidden md:table-cell">端口</th>
+                    <th class="text-left py-2 px-4 text-gray-500 font-medium hidden md:table-cell">状态详情</th>
+                    <th class="text-left py-2 px-4 text-gray-500 font-medium hidden lg:table-cell">创建时间</th>
+                    <th class="text-left py-2 px-4 text-gray-500 font-medium w-24">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="c in group.containers" :key="c.id"
+                    class="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                    <td class="py-2 px-4">
+                      <component :is="containerIcon(c.state)"
+                        class="w-4 h-4"
+                        :class="c.state === 'running' ? 'text-emerald-500' : 'text-gray-400'" />
+                    </td>
+                    <td class="py-2 px-4 font-medium text-gray-800 dark:text-gray-200">{{ c.name }}</td>
+                    <td class="py-2 px-4 text-gray-500 font-mono text-xs">{{ c.image }}</td>
+                    <td class="py-2 px-4 text-gray-500 text-xs hidden md:table-cell">{{ c.ports || '-' }}</td>
+                    <td class="py-2 px-4 text-gray-500 text-xs hidden md:table-cell">{{ c.status }}</td>
+                    <td class="py-2 px-4 text-gray-400 text-xs hidden lg:table-cell">{{ formatTime(c.created) }}</td>
+                    <td class="py-2 px-4">
+                      <div class="flex gap-1 items-center">
+                        <button
+                          v-if="c.state !== 'running'"
+                          @click="containerAction(c.id, 'start')"
+                          :disabled="loadingContainers.has(c.id)"
+                          class="p-1 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 disabled:opacity-30"
+                          title="启动"
+                        >
+                          <LoaderIcon v-if="loadingContainers.has(c.id)" class="w-3.5 h-3.5 animate-spin" />
+                          <PlayIcon v-else class="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          v-if="c.state === 'running'"
+                          @click="containerAction(c.id, 'stop')"
+                          :disabled="loadingContainers.has(c.id)"
+                          class="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 disabled:opacity-30"
+                          title="停止"
+                        >
+                          <LoaderIcon v-if="loadingContainers.has(c.id)" class="w-3.5 h-3.5 animate-spin" />
+                          <SquareIcon v-else class="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          @click="containerAction(c.id, 'restart')"
+                          :disabled="loadingContainers.has(c.id)"
+                          class="p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-600 dark:text-amber-400 disabled:opacity-30"
+                          title="重启"
+                        >
+                          <LoaderIcon v-if="loadingContainers.has(c.id)" class="w-3.5 h-3.5 animate-spin" />
+                          <RotateCwIcon v-else class="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
 

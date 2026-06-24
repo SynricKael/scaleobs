@@ -1,21 +1,34 @@
 import axios, { AxiosInstance } from 'axios'
 import type { LoginRequest, LoginResponse, Service, ServerStatus, AgentServerStatus } from '@/types'
 
-// In dev (Vite + Tauri devUrl): requests go to Vite dev server which proxies /api to Gateway
-// In prod (Tauri embedded tauri:// protocol): use absolute URL so requests reach Gateway
-const BASE = import.meta.env.DEV ? '' : 'http://localhost:8080'
+const GW_URL_KEY = 'scaleobs_gateway_url'
 
-// Create axios instance
+// Resolve the effective base URL for API calls.
+// Returns empty string (same-origin) for local mode, or the remote Gateway URL.
+export function getApiBase(): string {
+  const saved = localStorage.getItem(GW_URL_KEY)
+  if (saved && saved.trim()) return saved.trim()
+  return import.meta.env.DEV ? '' : 'http://localhost:8080'
+}
+
+// Create axios instance (baseURL is set dynamically in the request interceptor)
 const api: AxiosInstance = axios.create({
-  baseURL: BASE,
+  baseURL: '',
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// Request interceptor: add auth token
+// Request interceptor: add auth token + dynamic base URL
 api.interceptors.request.use((config) => {
+  const base = getApiBase()
+  if (base) {
+    config.baseURL = base
+  } else {
+    // In dev mode the Vite proxy handles it; otherwise use localhost
+    config.baseURL = import.meta.env.DEV ? '' : 'http://localhost:8080'
+  }
   const token = localStorage.getItem('token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
@@ -32,7 +45,8 @@ api.interceptors.response.use(
       localStorage.removeItem('user')
       localStorage.removeItem('username')
       localStorage.removeItem('expiresAt')
-      window.location.href = '/login'
+      const base = getApiBase()
+      window.location.href = base ? `${base}/login` : '/login'
     }
     return Promise.reject(error)
   }
@@ -61,8 +75,18 @@ export const serversApi = {
     ssh_user?: string
     ssh_pass?: string
     ssh_key_path?: string
+    docker_mode?: string
+    docker_host?: string
+    docker_port?: number
+    docker_tls?: boolean
+    docker_tls_ca?: string
+    docker_tls_cert?: string
+    docker_tls_key?: string
   }): Promise<void> {
     return api.patch(`/api/servers/${serverId}/settings`, data)
+  },
+  remove(serverId: string): Promise<void> {
+    return api.delete(`/api/servers/${serverId}`)
   },
 }
 

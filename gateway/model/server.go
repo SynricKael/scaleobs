@@ -23,11 +23,23 @@ type SSHConfig struct {
 	KeyPath  string `yaml:"key_path,omitempty" json:"key_path,omitempty"`
 }
 
-// ServerOverride stores per-server overrides (SSH, group) for any server regardless of source.
+// ServerOverride stores per-server overrides (SSH, group, Docker) for any server regardless of source.
 type ServerOverride struct {
-	ID    string     `yaml:"id" json:"id"`
-	Group string     `yaml:"group,omitempty" json:"group,omitempty"`
-	SSH   *SSHConfig `yaml:"ssh,omitempty" json:"ssh,omitempty"`
+	ID     string       `yaml:"id" json:"id"`
+	Group  string       `yaml:"group,omitempty" json:"group,omitempty"`
+	SSH    *SSHConfig   `yaml:"ssh,omitempty" json:"ssh,omitempty"`
+	Docker *DockerConfig `yaml:"docker,omitempty" json:"docker,omitempty"`
+}
+
+// DockerConfig defines per-server Docker connection settings.
+type DockerConfig struct {
+	Mode      string `yaml:"mode,omitempty" json:"mode,omitempty"` // "agent" or "api"
+	Host      string `yaml:"host,omitempty" json:"host,omitempty"`
+	Port      int    `yaml:"port,omitempty" json:"port,omitempty"`
+	TLS       bool   `yaml:"tls,omitempty" json:"tls,omitempty"`
+	TLSCACert string `yaml:"tls_ca_cert,omitempty" json:"tls_ca_cert,omitempty"`
+	TLSCert   string `yaml:"tls_cert,omitempty" json:"tls_cert,omitempty"`
+	TLSKey    string `yaml:"tls_key,omitempty" json:"tls_key,omitempty"`
 }
 
 // ServerStatus is the live runtime status of a server.
@@ -96,11 +108,13 @@ type AgentServerStatus struct {
 
 // DockerContainer holds details about a single container.
 type DockerContainer struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Image   string `json:"image"`
-	State   string `json:"state"`
-	Status  string `json:"status"`
-	Ports   string `json:"ports,omitempty"`
-	Created int64  `json:"created"`
+	ID       string            `json:"id"`
+	Name     string            `json:"name"`
+	Image    string            `json:"image"`
+	State    string            `json:"state"`
+	Status   string            `json:"status"`
+	Ports    string            `json:"ports,omitempty"`
+	Created  int64             `json:"created"`
+	Labels   map[string]string `json:"labels,omitempty"`   // Docker labels (incl. com.docker.compose.*)
+	Networks []string          `json:"networks,omitempty"` // Docker network names
 }

@@ -2,9 +2,14 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -13,13 +18,20 @@ import (
 	"github.com/glrs/observer/agent/reporter"
 )
 
+func defaultServerID() string {
+	if hostname, err := os.Hostname(); err == nil && hostname != "" {
+		return hostname
+	}
+	return runtime.GOOS + "-" + runtime.GOARCH
+}
+
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 	log.Println("[agent] starting Server Ops Portal Agent...")
 
 	// Parse flags and env vars
 	gatewayURL := getEnv("GATEWAY_URL", "ws://localhost:8080")
-	serverID := getEnv("SERVER_ID", "main-server")
+	serverID := getEnv("SERVER_ID", defaultServerID())
 	token := getEnv("AGENT_TOKEN", "agent-secret")
 	intervalStr := getEnv("COLLECT_INTERVAL", "10s")
 
@@ -105,6 +117,22 @@ func main() {
 
 		return metrics, nil
 	}
+
+	// ---- PID file: kill previous instance, prevent duplicates ----
+	pidFile := filepath.Join(os.TempDir(), fmt.Sprintf("sop-agent-%s.pid", strings.ReplaceAll(serverID, "/", "_")))
+	if data, err := os.ReadFile(pidFile); err == nil {
+		if oldPid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil {
+			if oldProc, err := os.FindProcess(oldPid); err == nil {
+				log.Printf("[agent] killing previous instance (PID %d)", oldPid)
+				oldProc.Signal(syscall.SIGTERM)
+				time.Sleep(1 * time.Second)
+				oldProc.Kill()
+			}
+		}
+	}
+	os.WriteFile(pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644)
+	defer os.Remove(pidFile)
+	// --------------------------------------------------------------
 
 	// Create reporter and run
 	r := reporter.NewWSReporter(gatewayURL, serverID, token)

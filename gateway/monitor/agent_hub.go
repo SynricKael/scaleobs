@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -51,13 +52,17 @@ func (hub *AgentHub) SetHostAgents(hostAgents map[string][]string) {
 	}
 }
 
-// SetOverrides stores per-server override settings (group, SSH).
+// SetOverrides stores per-server override settings (group, SSH, Docker).
 func (hub *AgentHub) SetOverrides(overrides []model.ServerOverride) {
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
 	hub.overrides = make(map[string]model.ServerOverride, len(overrides))
 	for _, o := range overrides {
 		hub.overrides[o.ID] = o
+	}
+	// Sync dynamic Docker hosts to DockerHub
+	if hub.dockerHub != nil {
+		hub.dockerHub.SyncDynamicHosts(overrides)
 	}
 }
 
@@ -182,6 +187,9 @@ func (hub *AgentHub) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Capture remote address before locking
+	remoteAddr := conn.RemoteAddr().String()
+
 	hub.mu.Lock()
 	existing, hasExisting := hub.servers[authMsg.ServerID]
 	ac := &agentConnection{
@@ -195,10 +203,15 @@ func (hub *AgentHub) HandleWS(w http.ResponseWriter, r *http.Request) {
 		ac.Name = existing.Name
 		ac.Host = existing.Host
 	}
+	// Update host with the remote IP if empty (helps ID mystery agents)
+	if ac.Host == "" {
+		host, _, _ := net.SplitHostPort(remoteAddr)
+		ac.Host = host
+	}
 	hub.servers[authMsg.ServerID] = ac
 	hub.mu.Unlock()
 
-	log.Printf("[agent] server %s authenticated", authMsg.ServerID)
+	log.Printf("[agent] server %s authenticated from %s", authMsg.ServerID, remoteAddr)
 	conn.WriteJSON(model.AgentMessage{Type: "auth_ok", ServerID: authMsg.ServerID})
 
 	for {
@@ -246,6 +259,19 @@ func (hub *AgentHub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[agent] server %s disconnected", authMsg.ServerID)
 }
 
+// RemoveServer removes a server from the hub by ID (handles all sources).
+// Returns true if a server was actually removed.
+func (hub *AgentHub) RemoveServer(id string) bool {
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+	_, exists := hub.servers[id]
+	if exists {
+		delete(hub.servers, id)
+		log.Printf("[agent] server %s removed from hub", id)
+	}
+	return exists
+}
+
 // GetAllStatuses returns combined status of all known servers:
 // configured servers + agent-connected servers + headscale-discovered nodes.
 // Merges Docker container info from remote Docker hosts where applicable.
@@ -270,7 +296,7 @@ func (hub *AgentHub) GetAllStatuses() []map[string]interface{} {
 			status["agents"] = ac.Agents
 		}
 
-		// Apply overrides (group, SSH config)
+		// Apply overrides (group, SSH, Docker config)
 		if ov, ok := hub.overrides[id]; ok {
 			if ov.Group != "" {
 				status["group"] = ov.Group
@@ -282,6 +308,17 @@ func (hub *AgentHub) GetAllStatuses() []map[string]interface{} {
 					"user":     ov.SSH.User,
 					"password": ov.SSH.Password,
 					"key_path": ov.SSH.KeyPath,
+				}
+			}
+			if ov.Docker != nil {
+				status["docker_config"] = map[string]interface{}{
+					"mode":        ov.Docker.Mode,
+					"host":        ov.Docker.Host,
+					"port":        ov.Docker.Port,
+					"tls":         ov.Docker.TLS,
+					"tls_ca_cert": ov.Docker.TLSCACert,
+					"tls_cert":    ov.Docker.TLSCert,
+					"tls_key":     ov.Docker.TLSKey,
 				}
 			}
 		}

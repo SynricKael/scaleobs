@@ -43,13 +43,14 @@ type DockerStats struct {
 
 // DockerContainer holds details about a single container.
 type DockerContainer struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Image   string `json:"image"`
-	State   string `json:"state"`   // running, exited, paused, etc.
-	Status  string `json:"status"`  // human-readable status
-	Ports   string `json:"ports,omitempty"`
-	Created int64  `json:"created"` // Unix timestamp
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Image     string   `json:"image"`
+	State     string   `json:"state"`     // running, exited, paused, etc.
+	Status    string   `json:"status"`    // human-readable status
+	Ports     string   `json:"ports,omitempty"`
+	Networks  []string `json:"networks,omitempty"` // Docker network names
+	Created   int64    `json:"created"`  // Unix timestamp
 }
 
 // AgentMessage is the WebSocket message format (matching Gateway).

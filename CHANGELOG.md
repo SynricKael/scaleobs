@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [v0.3.0] - 2026-06-19
+
+### Added
+- Per-server Docker connection settings in Server Settings dialog
+- Docker mode selector: "Agent" (default, auto-report via ScaleObs Agent) or "API" (direct TCP connection)
+- Manual Docker API host/port configuration for servers without an agent
+- TLS toggle with CA certificate, client certificate, and client key fields (supports file paths or inline PEM content)
+- DockerHub now supports dynamic per-server Docker hosts alongside the global `docker_hosts` list
+- TLS support in DockerHub polling (auto-detects HTTPS scheme when TLS is enabled)
+- README positioning section explaining ScaleObs vs Grafana / Portainer / Prometheus
+
+### Changed
+- Server settings API (`PATCH /api/servers/{id}/settings`) accepts new `docker_mode`, `docker_host`, `docker_port`, `docker_tls`, `docker_tls_ca`, `docker_tls_cert`, `docker_tls_key` fields
+- Server override model (`ServerOverride`) includes optional `DockerConfig`
+- AgentHub syncs dynamic Docker hosts to DockerHub whenever overrides are reloaded
+
+---
+
 ## [v0.2.0] - 2026-06-19
 
 ### Fixed

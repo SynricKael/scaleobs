@@ -5,6 +5,7 @@ import Dashboard from '@/views/Dashboard.vue'
 import PanelView from '@/views/PanelView.vue'
 import ServerDetail from '@/views/ServerDetail.vue'
 import Settings from '@/views/Settings.vue'
+import Applications from '@/views/Applications.vue'
 
 const routes = [
   {
@@ -35,6 +36,12 @@ const routes = [
     path: '/settings',
     name: 'Settings',
     component: Settings,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/apps',
+    name: 'Applications',
+    component: Applications,
     meta: { requiresAuth: true },
   },
 ]

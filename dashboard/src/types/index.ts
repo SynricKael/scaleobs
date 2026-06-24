@@ -22,6 +22,17 @@ export interface AgentServerStatus {
   error?: string
 }
 
+// DockerConfig holds per-server Docker connection settings
+export interface DockerConfig {
+  mode: string       // "agent" or "api"
+  host?: string
+  port?: number
+  tls?: boolean
+  tls_ca_cert?: string
+  tls_cert?: string
+  tls_key?: string
+}
+
 // ServerStatus represents the live status of a monitored server
 export interface ServerStatus {
   id: string
@@ -35,6 +46,7 @@ export interface ServerStatus {
   metrics?: ServerMetrics
   group?: string     // group assignment for organizing servers
   ssh?: SSHConfig    // SSH connection settings
+  docker_config?: DockerConfig  // per-server Docker connection config
 }
 
 // SSHConfig holds SSH connection settings for remote management
@@ -85,6 +97,8 @@ export interface DockerContainer {
   status: string  // human-readable status
   ports?: string
   created: number // Unix timestamp
+  labels?: Record<string, string>  // Docker labels
+  networks?: string[]              // Docker network names
 }
 
 // Login request/response
